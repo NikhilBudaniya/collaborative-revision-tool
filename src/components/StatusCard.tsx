@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { RevisionStatus } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { CheckCircle2, XCircle, AlertCircle, Scan } from 'lucide-react';
@@ -13,6 +14,12 @@ interface StatusCardProps {
 }
 
 export function StatusCard({ status, lastUpdatedBy, timestamp, isSyncing }: StatusCardProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const config = {
     APPROVED: {
       label: 'SYSTEM_APPROVED',
@@ -39,13 +46,17 @@ export function StatusCard({ status, lastUpdatedBy, timestamp, isSyncing }: Stat
 
   const { label, color, bgColor, borderColor, icon: Icon } = config[status];
 
+  const formatTime = (ts: number) => {
+    if (!mounted || ts === 0) return '--:--:--';
+    return new Date(ts).toLocaleTimeString();
+  };
+
   return (
     <div className={cn(
       "relative flex flex-col items-center justify-center border p-12 transition-all duration-500 overflow-hidden",
       bgColor,
       borderColor
     )}>
-      {/* Scanning Animation */}
       {isSyncing && (
         <motion.div
           initial={{ top: '-10%' }}
@@ -73,10 +84,10 @@ export function StatusCard({ status, lastUpdatedBy, timestamp, isSyncing }: Stat
       </motion.div>
 
       <div className="mt-8 flex flex-col items-center gap-1 font-mono text-[10px] text-zinc-500 uppercase">
-        {lastUpdatedBy ? (
+        {lastUpdatedBy && timestamp ? (
           <>
             <div>Updated by: <span className="text-zinc-300">{lastUpdatedBy}</span></div>
-            <div>Timestamp: <span className="text-zinc-300">{new Date(timestamp!).toLocaleTimeString()}</span></div>
+            <div>Timestamp: <span className="text-zinc-300">{formatTime(timestamp)}</span></div>
           </>
         ) : (
           <div className="italic">Awaiting initial data broadcast...</div>

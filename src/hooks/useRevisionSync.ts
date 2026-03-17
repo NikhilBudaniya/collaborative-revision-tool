@@ -1,24 +1,36 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getPusherClient } from '@/lib/pusher-client';
 import { RevisionStatus, RevisionLog, RevisionState } from '@/lib/types';
 import { getCookie } from '@/lib/cookies';
 
+const INITIAL_STATE: RevisionState = {
+  status: 'PENDING',
+  lastUpdate: { userId: 'SYSTEM', timestamp: 0, comment: 'Initial system state.' },
+  history: [],
+};
+
 export function useRevisionSync() {
-  const [state, setState] = useState<RevisionState>({
-    status: 'PENDING',
-    lastUpdate: { userId: '', timestamp: Date.now(), comment: '' },
-    history: [],
-  });
+  const [state, setState] = useState<RevisionState>(INITIAL_STATE);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const pusherRef = useRef<any>(null);
+
+  // Initial orgId fetch
+  useEffect(() => {
+    setOrgId(getCookie('orgId') || 'ORG_ALPHA');
+  }, []);
 
   useEffect(() => {
-    const orgId = getCookie('orgId');
     if (!orgId) return;
 
     const pusher = getPusherClient();
-    const channel = pusher.subscribe(`private-org-${orgId}`);
+    if (!pusher) return;
+    
+    pusherRef.current = pusher;
+    const channelName = `private-org-${orgId}`;
+    const channel = pusher.subscribe(channelName);
 
     channel.bind('STATE_UPDATED', (data: { 
       status: RevisionStatus, 
@@ -27,20 +39,27 @@ export function useRevisionSync() {
     }) => {
       setIsSyncing(true);
       
-      setState(prev => ({
-        status: data.status,
-        lastUpdate: data.lastUpdate,
-        history: [...prev.history, data.newLog].slice(-50), // Keep last 50
-      }));
+      setState(prev => {
+        if (prev.history.some(log => log.id === data.newLog.id)) {
+          return prev;
+        }
 
-      // Reset syncing visual after a brief delay
-      setTimeout(() => setIsSyncing(false), 1000);
+        return {
+          status: data.status,
+          lastUpdate: data.lastUpdate,
+          history: [...prev.history, data.newLog].slice(-50),
+        };
+      });
+
+      const timer = setTimeout(() => setIsSyncing(false), 1000);
+      return () => clearTimeout(timer);
     });
 
     return () => {
-      pusher.unsubscribe(`private-org-${orgId}`);
+      pusher.unsubscribe(channelName);
+      pusherRef.current = null;
     };
-  }, []);
+  }, [orgId]);
 
   return { state, setState, isSyncing };
 }
