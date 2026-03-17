@@ -70,7 +70,7 @@ export default function Home() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="h-2.5 w-2.5 bg-zinc-100 rounded-full" />
-            <h1 className="text-[10px] font-black tracking-[0.4em] uppercase">Interface_Revision_v1.0</h1>
+            <h1 className="text-[10px] font-black tracking-[0.4em] uppercase">Interface AI</h1>
           </div>
           <div className="hidden md:flex items-center gap-3 text-[9px] text-zinc-500 uppercase tracking-widest border-l border-zinc-800 pl-4">
             <div className="flex items-center gap-1.5">
@@ -143,7 +143,7 @@ export default function Home() {
 
       <footer className="border-t border-zinc-800 px-4 py-1.5 bg-zinc-950 text-[8px] text-zinc-600 flex justify-between items-center uppercase tracking-widest shrink-0">
         <div>System_Status: Optimal // Buffer: Clean</div>
-        <div>&copy; 2026 Interface_Global_Ops</div>
+        <div>&copy; 2026 Interface AI</div>
       </footer>
     </div>
   );
