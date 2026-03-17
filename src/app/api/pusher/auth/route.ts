@@ -1,4 +1,4 @@
-import { pusherServer } from '@/lib/pusher';
+import { pusherServer } from '@/lib/pusher-server';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 

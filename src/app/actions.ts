@@ -1,6 +1,6 @@
 'use server';
 
-import { pusherServer } from '@/lib/pusher';
+import { pusherServer } from '@/lib/pusher-server';
 import { RevisionStatus, RevisionLog } from '@/lib/types';
 import { cookies } from 'next/headers';
 import { v4 as uuidv4 } from 'uuid';

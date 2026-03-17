@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getPusherClient } from '@/lib/pusher';
+import { getPusherClient } from '@/lib/pusher-client';
 import { RevisionStatus, RevisionLog, RevisionState } from '@/lib/types';
 import { getCookie } from '@/lib/cookies';
 
