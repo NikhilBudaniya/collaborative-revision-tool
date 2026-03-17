@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { getPusherClient } from '@/lib/pusher-client';
 import { RevisionStatus, RevisionLog, RevisionState } from '@/lib/types';
 import { getCookie } from '@/lib/cookies';
+import { playEffect } from '@/lib/sounds';
 
 const INITIAL_STATE: RevisionState = {
   status: 'PENDING',
+  version: 0,
   lastUpdate: { userId: 'SYSTEM', timestamp: 0, comment: 'Initial system state.' },
   history: [],
 };
@@ -15,9 +17,10 @@ export function useRevisionSync() {
   const [state, setState] = useState<RevisionState>(INITIAL_STATE);
   const [isSyncing, setIsSyncing] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
+  
+  const versionRef = useRef(0);
   const pusherRef = useRef<any>(null);
 
-  // Initial orgId fetch
   useEffect(() => {
     setOrgId(getCookie('orgId') || 'ORG_ALPHA');
   }, []);
@@ -32,23 +35,21 @@ export function useRevisionSync() {
     const channelName = `private-org-${orgId}`;
     const channel = pusher.subscribe(channelName);
 
-    channel.bind('STATE_UPDATED', (data: { 
-      status: RevisionStatus, 
-      lastUpdate: { userId: string, timestamp: number, comment: string },
-      newLog: RevisionLog 
-    }) => {
-      setIsSyncing(true);
-      
-      setState(prev => {
-        if (prev.history.some(log => log.id === data.newLog.id)) {
-          return prev;
-        }
+    channel.bind('STATE_UPDATED', (data: RevisionState & { newLog: RevisionLog }) => {
+      if (data.version <= versionRef.current) {
+        return;
+      }
 
-        return {
-          status: data.status,
-          lastUpdate: data.lastUpdate,
-          history: [...prev.history, data.newLog].slice(-50),
-        };
+      console.log(`[SYNC_IN] Version: ${data.version}`);
+      versionRef.current = data.version;
+      setIsSyncing(true);
+      playEffect('TICK');
+      
+      setState({
+        status: data.status,
+        version: data.version,
+        lastUpdate: data.lastUpdate,
+        history: data.history,
       });
 
       const timer = setTimeout(() => setIsSyncing(false), 1000);
@@ -61,5 +62,12 @@ export function useRevisionSync() {
     };
   }, [orgId]);
 
-  return { state, setState, isSyncing };
+  const setVersionedState = useCallback((newState: RevisionState) => {
+    if (newState.version >= versionRef.current) {
+      versionRef.current = newState.version;
+      setState(newState);
+    }
+  }, []);
+
+  return { state, setState: setVersionedState, isSyncing };
 }

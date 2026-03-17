@@ -10,6 +10,7 @@ export interface RevisionLog {
 
 export interface RevisionState {
   status: RevisionStatus;
+  version: number;
   lastUpdate: {
     userId: string;
     timestamp: number;
