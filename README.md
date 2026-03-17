@@ -8,6 +8,7 @@ This is a polished, real-time collaborative workspace built with **Next.js 15**,
 - **Organization Isolation**: Uses `private-org-{id}` channels and server-side cookie validation to ensure users only see data belonging to their `orgId`.
 - **Zero-Latency UI**: Leverages React 19 `useOptimistic` and `useTransition` for instantaneous feedback during status updates.
 - **Race Condition Protection**: Implements server-side atomic queues and client-side versioning to handle concurrent updates without data loss or UI flickering.
+- **Offline Resilience**: Built-in **Outbox System** that queues updates locally if the connection is lost and auto-syncs upon reconnection.
 - **Industrial Aesthetic**: A custom "Command Center" theme built with Tailwind CSS (Zinc palette) and Geist Mono typography.
 - **Auditory Feedback**: Tactile sound effects for system events (requires assets in `/public/sounds/`).
 - **Session Manager**: A built-in developer tool (bottom-right) to quickly toggle `orgId` and `userId` for testing.
@@ -15,8 +16,8 @@ This is a polished, real-time collaborative workspace built with **Next.js 15**,
 ## 🔊 Auditory Feedback System
 
 To enhance the "Command Center" feel, the app includes a minimalist sound engine:
-- **Success Ping (`success.mp3`)**: Rings immediately after you successfully commit a state update. Provides confirmation that your change was persisted.
-- **System Tick (`tick.mp3`)**: Rings when a new update is received from *another* user or tab. Provides awareness of collaborative activity without needing to look at the log.
+- **Success Ping (`success.mp3`)**: Rings immediately after you successfully commit a state update.
+- **System Tick (`tick.mp3`)**: Rings when a new update is received from *another* user or tab.
 
 *Note: Please place your `.mp3` files in `colab_frontend/public/sounds/` to activate this feature.*
 
@@ -25,20 +26,36 @@ To enhance the "Command Center" feel, the app includes a minimalist sound engine
 During the design phase, several alternative approaches were evaluated and ruled out to ensure the most robust solution for a real-world collaborative environment:
 
 ### 1. Ruled Out: Native Browser Sync (`BroadcastChannel`)
-*   **Initial Idea**: Use the browser's native `BroadcastChannel` API to sync tabs locally without a backend.
-*   **Why Ruled Out**: While "zero-config," it only works for tabs on the same machine. A true collaborative tool must sync across different users, machines, and networks. We moved to **Pusher** to provide a global WebSocket layer.
+- **Initial Idea**: Use the browser's native `BroadcastChannel` API to sync tabs locally without a backend.
+- **Why Ruled Out**: While "zero-config," it only works for tabs on the same machine. A true collaborative tool must sync across different users, machines, and networks. We moved to **Pusher** to provide a global WebSocket layer.
 
 ### 2. Ruled Out: Client-Side Only State (`localStorage`)
-*   **Initial Idea**: Store the revision history in the browser's local storage.
-*   **Why Ruled Out**: This would fail the "Shared State" requirement. Users in the same organization would have independent histories until they manually shared them. We implemented a **Server-Side Global Singleton** to act as the temporary "Source of Truth" for all users in an organization.
+- **Initial Idea**: Store the revision history in the browser's local storage.
+- **Why Ruled Out**: This would fail the "Shared State" requirement. Users in the same organization would have independent histories until they manually shared them. We implemented a **Server-Side Global Singleton** to act as the temporary "Source of Truth."
 
 ### 3. Ruled Out: Standard WebSockets (`Socket.IO`)
-*   **Initial Idea**: Use a traditional Socket.IO server.
-*   **Why Ruled Out**: Standard Next.js serverless functions (like API Routes or Server Actions) are ephemeral and cannot maintain the persistent connection required for raw WebSockets. We chose **Pusher** because it manages the persistent connection infrastructure externally, which is the industry standard for Next.js/Serverless real-time apps.
+- **Initial Idea**: Use a traditional Socket.IO server.
+- **Why Ruled Out**: Standard Next.js serverless functions (like API Routes or Server Actions) are ephemeral and cannot maintain the persistent connection required for raw WebSockets. **Pusher** manages the infrastructure externally, which is the industry standard for Next.js.
 
 ### 4. Ruled Out: Periodic Polling
-*   **Initial Idea**: Have the client "ask" the server for updates every few seconds.
-*   **Why Ruled Out**: Polling feels "laggy" and creates unnecessary server load. It doesn't meet the high-performance "Real-Time" objective as elegantly as a Push-based architecture.
+- **Initial Idea**: Have the client "ask" the server for updates every few seconds.
+- **Why Ruled Out**: Polling feels "laggy" and creates unnecessary server load. It doesn't meet the high-performance "Real-Time" objective as elegantly as a Push-based architecture.
+
+## 🏗 Advanced Implementation Details
+
+### 1. Persistence & HMR-Safe State
+Since this prototype operates without a traditional database, we implemented a **Global Singleton Pattern** on the server. This in-memory cache stores the `RevisionState` and `RevisionLog` per `orgId`, ensuring history persists across page refreshes and survives Hot Module Replacement (HMR) during development.
+
+### 2. Distributed Race Condition Shield
+To handle high-concurrency environments across different machines:
+- **Server-Side Atomic Queue**: All updates for a specific organization are enqueued and processed sequentially to ensure `version` increments remain consistent.
+- **Monotonic Versioning**: Every state broadcast includes a version number. The client-side hook explicitly rejects any incoming packets with a version equal to or lower than the current local state, preventing "state-flips" from out-of-order network traffic.
+
+### 3. Connection State & Offline Outbox
+The application actively monitors the WebSocket link. If the link is severed:
+- The UI displays a `NETWORK_DISCONNECTED` system alert.
+- Updates are stored in a local **Outbox** (persisted in `localStorage`).
+- Upon restoration of the `SYS_LINK`, the outbox is automatically flushed to the server in chronological order.
 
 ## 🏁 Getting Started
 
@@ -61,11 +78,14 @@ During the design phase, several alternative approaches were evaluated and ruled
    npm run dev
    ```
 
-4. **Testing Sync & Isolation**:
-   - Open the app in two windows.
-   - Use the **Session Manager** (bottom-right) to set both to the same `orgId`.
-   - Update a status in one window and watch it sync.
-   - Change the `orgId` in one window to verify that updates are no longer shared (Isolation Protocol).
+## 🧪 Testing Sync & Isolation
+
+- **Step 1**: Open the application in two separate browser windows (or different browsers).
+- **Step 2**: In both windows, look for the **Session Manager** in the bottom-right corner.
+- **Step 3**: Set both windows to the same `ORG_ID` (e.g., `ORG_ALPHA`).
+- **Step 4**: Update the status in Window A. You should see it reflect **instantly** in Window B, accompanied by a sound effect.
+- **Step 5**: Change the `ORG_ID` in Window B to something else (e.g., `ORG_BETA`).
+- **Step 6**: Update the status in Window A again. Window B should **not** receive the update, confirming strict organizational isolation.
 
 ---
-*Developed for the Interface Frontend Engineering Task.*
+*Developed for the Interface AI.*

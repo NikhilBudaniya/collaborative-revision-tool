@@ -13,10 +13,13 @@ const INITIAL_STATE: RevisionState = {
   history: [],
 };
 
+export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'CONNECTING' | 'ERROR';
+
 export function useRevisionSync() {
   const [state, setState] = useState<RevisionState>(INITIAL_STATE);
   const [isSyncing, setIsSyncing] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('CONNECTING');
   
   const versionRef = useRef(0);
   const pusherRef = useRef<any>(null);
@@ -29,18 +32,31 @@ export function useRevisionSync() {
     if (!orgId) return;
 
     const pusher = getPusherClient();
-    if (!pusher) return;
+    if (!pusher) {
+      setConnectionStatus('ERROR');
+      return;
+    }
     
     pusherRef.current = pusher;
+
+    // Monitor Connection State
+    pusher.connection.bind('state_change', (states: any) => {
+      console.log(`[PUSHER_STATE] ${states.current}`);
+      switch (states.current) {
+        case 'connected': setConnectionStatus('CONNECTED'); break;
+        case 'connecting': setConnectionStatus('CONNECTING'); break;
+        case 'unavailable': 
+        case 'failed': 
+        case 'disconnected': setConnectionStatus('DISCONNECTED'); break;
+      }
+    });
+
     const channelName = `private-org-${orgId}`;
     const channel = pusher.subscribe(channelName);
 
     channel.bind('STATE_UPDATED', (data: RevisionState & { newLog: RevisionLog }) => {
-      if (data.version <= versionRef.current) {
-        return;
-      }
+      if (data.version <= versionRef.current) return;
 
-      console.log(`[SYNC_IN] Version: ${data.version}`);
       versionRef.current = data.version;
       setIsSyncing(true);
       playEffect('TICK');
@@ -58,6 +74,7 @@ export function useRevisionSync() {
 
     return () => {
       pusher.unsubscribe(channelName);
+      pusher.connection.unbind_all();
       pusherRef.current = null;
     };
   }, [orgId]);
@@ -69,5 +86,5 @@ export function useRevisionSync() {
     }
   }, []);
 
-  return { state, setState: setVersionedState, isSyncing };
+  return { state, setState: setVersionedState, isSyncing, connectionStatus };
 }
