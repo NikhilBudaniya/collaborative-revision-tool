@@ -35,7 +35,7 @@ During the design phase, several alternative approaches were evaluated and ruled
 
 ### 3. Ruled Out: Standard WebSockets (`Socket.IO`)
 - **Initial Idea**: Use a traditional Socket.IO server.
-- **Why Ruled Out**: Standard Next.js serverless functions (like API Routes or Server Actions) are ephemeral and cannot maintain the persistent connection required for raw WebSockets. **Pusher** manages the infrastructure externally, which is the industry standard for Next.js.
+- **Why Ruled Out**: Standard Next.js serverless functions are ephemeral and cannot maintain the persistent connection required for raw WebSockets. **Pusher** manages the infrastructure externally, which is the industry standard for Next.js.
 
 ### 4. Ruled Out: Periodic Polling
 - **Initial Idea**: Have the client "ask" the server for updates every few seconds.
@@ -56,6 +56,12 @@ The application actively monitors the WebSocket link. If the link is severed:
 - The UI displays a `NETWORK_DISCONNECTED` system alert.
 - Updates are stored in a local **Outbox** (persisted in `localStorage`).
 - Upon restoration of the `SYS_LINK`, the outbox is automatically flushed to the server in chronological order.
+
+### 4. Chronological Reconciliation
+The system uses **Event-Time Reconciliation** to handle late-arriving offline updates:
+- **Client-Side Timestamping**: Timestamps are generated the moment "Commit" is clicked, preserving user intent regardless of network lag.
+- **Deterministic History**: When the server receives an update, it sorts the entire historical log by timestamp.
+- **LWW (Last-Write-Wins) Status**: The current "Winner" status is only updated if the incoming event is strictly newer than the current `lastUpdate.timestamp`. Older updates are added to history but do not revert the system status.
 
 ## 🏁 Getting Started
 

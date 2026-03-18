@@ -11,12 +11,13 @@ import { getCookie } from '@/lib/cookies';
 import { playEffect } from '@/lib/sounds';
 import { Activity, ShieldCheck, Database, Server, WifiOff, CloudSync } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function Home() {
   const { state, setState, isSyncing, connectionStatus } = useRevisionSync();
   const [isPending, startTransition] = useTransition();
   const [session, setSession] = useState({ orgId: '', userId: '' });
-  const [outbox, setOutbox] = useState<{status: RevisionStatus, comment: string}[]>([]);
+  const [outbox, setOutbox] = useState<{status: RevisionStatus, comment: string, timestamp: number, id: string}[]>([]);
   
   // Persistence: Restore outbox from localStorage if it exists
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function Home() {
           // Wrap in transition to handle optimistic updates correctly
           startTransition(async () => {
             try {
-              const result = await updateRevisionState(item.status, item.comment);
+              const result = await updateRevisionState(item.status, item.comment, item.timestamp, item.id);
               if (result.success && result.newState) {
                 setState(result.newState);
               }
@@ -68,36 +69,39 @@ export default function Home() {
     }
   }, [connectionStatus, outbox.length, session.orgId, setState]);
 
-  const [optimisticState, addOptimisticState] = useOptimistic<RevisionState, { status: RevisionStatus, comment: string }>(
+  const [optimisticState, addOptimisticState] = useOptimistic<RevisionState, { status: RevisionStatus, comment: string, timestamp: number }>(
     state,
     (curr, update) => ({
       ...curr,
       status: update.status,
       lastUpdate: {
         userId: session.userId || 'USER_01',
-        timestamp: Date.now(),
+        timestamp: update.timestamp,
         comment: update.comment,
       },
     })
   );
 
   const handleUpdate = async (status: RevisionStatus, comment: string, isFromOutbox = false) => {
+    const eventTimestamp = Date.now();
+    const eventId = uuidv4();
+
     startTransition(async () => {
       if (!isFromOutbox) {
-        addOptimisticState({ status, comment });
+        addOptimisticState({ status, comment, timestamp: eventTimestamp });
       }
 
       if (connectionStatus !== 'CONNECTED') {
-        // Offline mode: queue the update
-        const newOutbox = [...outbox, { status, comment }];
+        // Offline mode: queue the update with its original intent time
+        const newOutbox = [...outbox, { status, comment, timestamp: eventTimestamp, id: eventId }];
         setOutbox(newOutbox);
         localStorage.setItem(`outbox-${session.orgId}`, JSON.stringify(newOutbox));
-        playEffect('TICK'); // Minimal feedback
+        playEffect('TICK'); 
         return;
       }
 
       try {
-        const result = await updateRevisionState(status, comment);
+        const result = await updateRevisionState(status, comment, eventTimestamp, eventId);
         if (result.success && result.newState) {
           setState(result.newState);
           playEffect('SUCCESS');
@@ -110,7 +114,6 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-zinc-950 font-mono text-zinc-100">
-      {/* Top Navigation / System Bar */}
       <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-2 bg-zinc-950/80 backdrop-blur-md z-10 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -151,7 +154,6 @@ export default function Home() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Workspace Controls */}
         <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar relative">
           {connectionStatus !== 'CONNECTED' && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-rose-500 text-white text-[9px] px-4 py-1 font-bold rounded-full shadow-lg flex items-center gap-2">
@@ -202,7 +204,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Sidebar Activity Feed */}
         <aside className="w-72 lg:w-80 hidden md:block border-l border-zinc-800 shrink-0">
           <ActivityLog history={state.history} />
         </aside>
