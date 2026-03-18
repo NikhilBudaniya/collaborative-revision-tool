@@ -88,4 +88,4 @@ The application actively monitors the WebSocket link. If the link is severed:
 - **Step 6**: Update the status in Window A again. Window B should **not** receive the update, confirming strict organizational isolation.
 
 ---
-*Developed for the Interface AI.*
+*Developed for Interface AI.*
