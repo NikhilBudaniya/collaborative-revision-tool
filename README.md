@@ -46,22 +46,23 @@ During the design phase, several alternative approaches were evaluated and ruled
 ### 1. Persistence & HMR-Safe State
 Since this prototype operates without a traditional database, we implemented a **Global Singleton Pattern** on the server. This in-memory cache stores the `RevisionState` and `RevisionLog` per `orgId`, ensuring history persists across page refreshes and survives Hot Module Replacement (HMR) during development.
 
-### 2. Distributed Race Condition Shield
-To handle high-concurrency environments across different machines:
-- **Server-Side Atomic Queue**: All updates for a specific organization are enqueued and processed sequentially to ensure `version` increments remain consistent.
-- **Monotonic Versioning**: Every state broadcast includes a version number. The client-side hook explicitly rejects any incoming packets with a version equal to or lower than the current local state, preventing "state-flips" from out-of-order network traffic.
+### 2. The "Dual-Layer Defense" Against Race Conditions
+To handle high-concurrency environments across different machines, we use two complementary systems:
+
+#### Layer 1: Monotonic Version Shield (Transport Layer)
+Every state broadcast includes a server-generated `version` number. The client-side `useRevisionSync` hook maintains a `versionRef` and **explicitly rejects** any incoming packets with a version equal to or lower than its current state. This prevents "state-flips" caused by out-of-order network packet delivery.
+
+#### Layer 2: Chronological Reconciliation (Data Layer)
+The system uses **Event-Time Reconciliation** to handle late-arriving updates (e.g., from an offline outbox):
+- **Client-Side Timestamping**: Timestamps are generated the moment "Commit" is clicked, preserving the user's original intent.
+- **Deterministic History**: When the server receives a delayed update, it inserts it into the history and re-sorts the entire log by timestamp.
+- **LWW (Last-Write-Wins) Status**: The "Current System Status" is only updated if the incoming event is strictly newer (by timestamp) than the existing state. If an offline update from 10:00 AM arrives at 10:10 AM, it is added to history, but it **will not revert** a 10:05 AM update that is already live.
 
 ### 3. Connection State & Offline Outbox
 The application actively monitors the WebSocket link. If the link is severed:
 - The UI displays a `NETWORK_DISCONNECTED` system alert.
 - Updates are stored in a local **Outbox** (persisted in `localStorage`).
 - Upon restoration of the `SYS_LINK`, the outbox is automatically flushed to the server in chronological order.
-
-### 4. Chronological Reconciliation
-The system uses **Event-Time Reconciliation** to handle late-arriving offline updates:
-- **Client-Side Timestamping**: Timestamps are generated the moment "Commit" is clicked, preserving user intent regardless of network lag.
-- **Deterministic History**: When the server receives an update, it sorts the entire historical log by timestamp.
-- **LWW (Last-Write-Wins) Status**: The current "Winner" status is only updated if the incoming event is strictly newer than the current `lastUpdate.timestamp`. Older updates are added to history but do not revert the system status.
 
 ## 🏁 Getting Started
 
@@ -94,4 +95,4 @@ The system uses **Event-Time Reconciliation** to handle late-arriving offline up
 - **Step 6**: Update the status in Window A again. Window B should **not** receive the update, confirming strict organizational isolation.
 
 ---
-*Developed for Interface AI.*
+*Developed for Interface.*
